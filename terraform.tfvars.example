@@ -1,0 +1,44 @@
+# Copy to terraform.tfvars and edit.
+
+proxmox_endpoint  = "https://192.168.1.10:8006/"
+proxmox_api_token = "terraform@pve!provider=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+proxmox_insecure  = true
+proxmox_node      = "pve"
+
+# SSH to the Proxmox node (needed to upload cloud-init snippets).
+proxmox_ssh_username = "root"
+# proxmox_ssh_private_key_path = "~/.ssh/id_ed25519"   # empty = ssh-agent
+
+vm_datastore       = "local-lvm"
+image_datastore    = "local"
+snippets_datastore = "local"
+network_bridge     = "vmbr0"
+gateway            = "192.168.1.1"
+dns_servers        = ["1.1.1.1", "8.8.8.8"]
+
+vm_user = "ubuntu"
+ssh_public_keys = [
+  "ssh-ed25519 AAAA... you@laptop",
+]
+
+gitlab_vm = {
+  vm_id     = 200
+  name      = "gitlab"
+  ip        = "192.168.1.50/24"
+  cores     = 4
+  memory_mb = 8192
+  disk_gb   = 50
+}
+
+runner_vm = {
+  vm_id     = 201
+  name      = "gitlab-runner"
+  ip        = "192.168.1.51/24"
+  cores     = 2
+  memory_mb = 4096
+  disk_gb   = 40
+}
+
+runner_tags              = ["docker", "proxmox"]
+runner_concurrent        = 2
+runner_docker_privileged = false

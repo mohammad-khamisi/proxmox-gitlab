@@ -1,0 +1,12 @@
+# Push this file to any project on the new GitLab to test the runner.
+stages:
+  - test
+
+hello:
+  stage: test
+  tags:
+    - docker
+  image: alpine:latest
+  script:
+    - echo "Hello from $(hostname) via runner $CI_RUNNER_DESCRIPTION"
+    - cat /etc/os-release

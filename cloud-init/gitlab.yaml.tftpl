@@ -1,0 +1,46 @@
+#cloud-config
+hostname: ${hostname}
+manage_etc_hosts: true
+timezone: ${timezone}
+
+users:
+  - name: ${vm_user}
+    groups: [sudo]
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: true
+    ssh_authorized_keys:
+%{ for key in ssh_public_keys ~}
+      - ${key}
+%{ endfor ~}
+
+package_update: true
+package_upgrade: true
+packages:
+  - qemu-guest-agent
+  - curl
+  - ca-certificates
+  - openssh-server
+  - tzdata
+  - perl
+
+write_files:
+  - path: /etc/gitlab-bootstrap.env
+    permissions: "0600"
+    content: |
+      EXTERNAL_URL=${jsonencode(external_url)}
+      GITLAB_EDITION=${jsonencode(gitlab_edition)}
+      GITLAB_ROOT_PASSWORD=${jsonencode(root_password)}
+      GITLAB_AUTOMATION_TOKEN=${jsonencode(automation_token)}
+  - path: /usr/local/sbin/install-gitlab.sh
+    permissions: "0755"
+    content: |
+      ${indent(6, install_script)}
+  - path: /usr/local/share/gitlab-bootstrap.rb
+    permissions: "0600"
+    content: |
+      ${indent(6, bootstrap_rb)}
+
+runcmd:
+  - systemctl enable --now qemu-guest-agent
+  - /usr/local/sbin/install-gitlab.sh > /var/log/install-gitlab.log 2>&1

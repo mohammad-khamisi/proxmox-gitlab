@@ -1,0 +1,45 @@
+#cloud-config
+hostname: ${hostname}
+manage_etc_hosts: true
+timezone: ${timezone}
+
+users:
+  - name: ${vm_user}
+    groups: [sudo]
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: true
+    ssh_authorized_keys:
+%{ for key in ssh_public_keys ~}
+      - ${key}
+%{ endfor ~}
+
+package_update: true
+package_upgrade: true
+packages:
+  - qemu-guest-agent
+  - curl
+  - ca-certificates
+  - jq
+  - docker.io
+
+write_files:
+  - path: /etc/gitlab-runner-bootstrap.env
+    permissions: "0600"
+    content: |
+      GITLAB_URL=${jsonencode(gitlab_url)}
+      GITLAB_AUTOMATION_TOKEN=${jsonencode(automation_token)}
+      RUNNER_NAME=${jsonencode(hostname)}
+      RUNNER_TAGS=${jsonencode(runner_tags)}
+      RUNNER_CONCURRENT=${runner_concurrent}
+      RUNNER_DOCKER_IMAGE=${jsonencode(docker_image)}
+      RUNNER_DOCKER_PRIVILEGED=${docker_privileged}
+  - path: /usr/local/sbin/install-runner.sh
+    permissions: "0755"
+    content: |
+      ${indent(6, install_script)}
+
+runcmd:
+  - systemctl enable --now qemu-guest-agent
+  - systemctl enable --now docker
+  - /usr/local/sbin/install-runner.sh > /var/log/install-runner.log 2>&1
