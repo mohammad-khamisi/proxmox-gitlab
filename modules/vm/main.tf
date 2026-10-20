@@ -41,6 +41,17 @@ resource "proxmox_virtual_environment_vm" "this" {
     }
   }
 
+  # Templates may still have an installer ISO attached: eject it and boot
+  # from the disk.
+  dynamic "cdrom" {
+    for_each = local.cloning ? [1] : []
+    content {
+      interface = "ide2"
+      file_id   = "none"
+    }
+  }
+  boot_order = local.cloning ? [local.disk_interface] : null
+
   # From an image: the disk is imported. From a template: the template's
   # disk on the same interface is resized.
   disk {
