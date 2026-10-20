@@ -35,6 +35,18 @@ variable "proxmox_ssh_private_key_path" {
   default     = ""
 }
 
+variable "use_snippets" {
+  description = <<-EOT
+    true  = configure the VMs with cloud-init user-data snippets (needs SSH to the
+            Proxmox node and a datastore with 'snippets' content).
+    false = no SSH to the node: VMs boot with the built-in Proxmox cloud-init and
+            Terraform installs GitLab/Runner over SSH to the VMs themselves. The image
+            must then be of 'import' content type.
+  EOT
+  type        = bool
+  default     = false
+}
+
 variable "proxmox_node" {
   description = "Name of the Proxmox node to create the VMs on"
   type        = string
@@ -51,7 +63,7 @@ variable "vm_datastore" {
 }
 
 variable "image_datastore" {
-  description = "Datastore (with 'iso' content) to store the downloaded cloud image"
+  description = "Datastore to store the downloaded cloud image ('import' content, or 'iso' when use_snippets = true)"
   type        = string
   default     = "local"
 }
@@ -87,16 +99,17 @@ variable "dns_servers" {
 
 variable "ubuntu_image_file_id" {
   description = <<-EOT
-    Existing Ubuntu cloud image already on the node, as '<storage>:iso/<file name>'
-    (e.g. 'iso:iso/noble-server-cloudimg-amd64.img'). When set, nothing is downloaded
-    and image_datastore / ubuntu_image_url are ignored.
+    Existing Ubuntu cloud image already on the node, as '<storage>:import/<file name>'
+    (e.g. 'iso:import/noble-server-cloudimg-amd64.qcow2'), or '<storage>:iso/<file name>'
+    when use_snippets = true. When set, nothing is downloaded and image_datastore /
+    ubuntu_image_url are ignored.
   EOT
   type        = string
   default     = ""
 
   validation {
     condition     = var.ubuntu_image_file_id == "" || can(regex("^[^:\\s]+:(iso|import)/[^\\s]+$", var.ubuntu_image_file_id))
-    error_message = "ubuntu_image_file_id must look like <storage>:iso/<file name>, e.g. iso:iso/noble-server-cloudimg-amd64.img."
+    error_message = "ubuntu_image_file_id must look like <storage>:import/<file name>, e.g. iso:import/noble-server-cloudimg-amd64.qcow2."
   }
 }
 
@@ -118,6 +131,12 @@ variable "vm_user" {
 variable "ssh_public_keys" {
   description = "SSH public keys allowed to log in as vm_user"
   type        = list(string)
+}
+
+variable "vm_ssh_private_key_path" {
+  description = "Private key matching ssh_public_keys, used to provision the VMs when use_snippets = false (no passphrase)"
+  type        = string
+  default     = "~/.ssh/id_ed25519"
 }
 
 variable "timezone" {

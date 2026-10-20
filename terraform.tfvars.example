@@ -5,19 +5,34 @@ proxmox_api_token = "terraform@pve!provider=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 proxmox_insecure  = true
 proxmox_node      = "pve"
 
-# SSH to the Proxmox node (needed to upload cloud-init snippets).
-proxmox_ssh_username = "root"
-# proxmox_ssh_private_key_path = "~/.ssh/id_ed25519"   # empty = ssh-agent
+# ---------------------------------------------------------------------------
+# How the VMs are configured
+#   false (default) = no SSH to the Proxmox node needed. Terraform connects
+#                     over SSH to the new VM(s) and installs GitLab/Runner.
+#   true            = cloud-init snippets; needs root SSH to the Proxmox node
+#                     and a datastore with 'snippets' content.
+# ---------------------------------------------------------------------------
+use_snippets = false
+
+# Private key matching ssh_public_keys below (no passphrase). Used to SSH into
+# the VMs when use_snippets = false. On Windows: "C:/Users/<you>/.ssh/id_ed25519"
+vm_ssh_private_key_path = "~/.ssh/id_ed25519"
+
+# Only needed when use_snippets = true:
+# proxmox_ssh_username         = "root"
+# proxmox_ssh_private_key_path = "~/.ssh/id_ed25519"
+# snippets_datastore           = "local"
 
 # VM disks on the NetApp iSCSI storage (LVM over iSCSI).
 vm_datastore = "iscsi-netapp"
-# Cloud image and cloud-init snippets stay on a file-based storage.
-image_datastore    = "local"
-snippets_datastore = "local"
 
-# Already uploaded the Ubuntu cloud image yourself? Point to it and skip the
-# download (format: <storage>:iso/<file name>).
-# ubuntu_image_file_id = "iso:iso/noble-server-cloudimg-amd64.img"
+# Ubuntu cloud image. With use_snippets = false it must be of 'import' content
+# type. Either let Terraform download it to image_datastore (needs 'Import'
+# content enabled there) ...
+image_datastore = "local"
+# ... or upload it yourself (storage > Import > Upload, name ending in .qcow2)
+# and point to it:
+# ubuntu_image_file_id = "iso:import/noble-server-cloudimg-amd64.qcow2"
 
 network_bridge = "vmbr0"
 gateway        = "192.168.1.1"

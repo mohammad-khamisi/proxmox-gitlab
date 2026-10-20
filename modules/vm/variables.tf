@@ -14,6 +14,10 @@ variable "memory_mb" { type = number }
 variable "disk_gb" { type = number }
 variable "datastore_id" { type = string }
 variable "image_file_id" { type = string }
+variable "image_import" {
+  description = "true = image is '<storage>:import/<file>', imported via the API (import_from); false = file_id, imported via SSH to the node"
+  type        = bool
+}
 variable "bridge" { type = string }
 variable "vlan_id" {
   type    = number
@@ -22,4 +26,23 @@ variable "vlan_id" {
 variable "ip_cidr" { type = string }
 variable "gateway" { type = string }
 variable "dns_servers" { type = list(string) }
-variable "user_data_file_id" { type = string }
+variable "agent_enabled" {
+  description = "Wait for the QEMU guest agent (only when cloud-init installs it)"
+  type        = bool
+  default     = true
+}
+variable "user_data_file_id" {
+  description = "Custom cloud-init user-data snippet; conflicts with user_account"
+  type        = string
+  default     = null
+}
+variable "user_account" {
+  description = "Built-in cloud-init user, used when no user-data snippet is given"
+  type = object({
+    username = string
+    keys     = list(string)
+    password = string
+  })
+  default   = null
+  sensitive = true
+}

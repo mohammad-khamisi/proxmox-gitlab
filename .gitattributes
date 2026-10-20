@@ -1,0 +1,4 @@
+# Scripts and templates run on Linux VMs: keep LF line endings on Windows too.
+*.sh     text eol=lf
+*.rb     text eol=lf
+*.tftpl  text eol=lf

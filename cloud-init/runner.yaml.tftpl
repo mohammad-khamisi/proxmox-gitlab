@@ -27,13 +27,7 @@ write_files:
   - path: /etc/gitlab-runner-bootstrap.env
     permissions: "0600"
     content: |
-      GITLAB_URL=${jsonencode(gitlab_url)}
-      GITLAB_AUTOMATION_TOKEN=${jsonencode(automation_token)}
-      RUNNER_NAME=${jsonencode(runner_name)}
-      RUNNER_TAGS=${jsonencode(runner_tags)}
-      RUNNER_CONCURRENT=${runner_concurrent}
-      RUNNER_DOCKER_IMAGE=${jsonencode(docker_image)}
-      RUNNER_DOCKER_PRIVILEGED=${docker_privileged}
+      ${indent(6, runner_env)}
   - path: /usr/local/sbin/install-runner.sh
     permissions: "0755"
     content: |

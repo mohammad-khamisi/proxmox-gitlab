@@ -6,9 +6,9 @@ resource "proxmox_virtual_environment_vm" "this" {
   tags        = var.tags
   on_boot     = true
 
-  # Cloud-init installs and starts the agent on first boot.
+  # Cloud-init (or the SSH provisioning) installs and starts the agent.
   agent {
-    enabled = true
+    enabled = var.agent_enabled
     timeout = "15m"
   }
 
@@ -27,7 +27,8 @@ resource "proxmox_virtual_environment_vm" "this" {
 
   disk {
     datastore_id = var.datastore_id
-    file_id      = var.image_file_id
+    import_from  = var.image_import ? var.image_file_id : null
+    file_id      = var.image_import ? null : var.image_file_id
     interface    = "virtio0"
     iothread     = true
     discard      = "on"
@@ -56,6 +57,15 @@ resource "proxmox_virtual_environment_vm" "this" {
     }
 
     user_data_file_id = var.user_data_file_id
+
+    dynamic "user_account" {
+      for_each = var.user_data_file_id == null ? [1] : []
+      content {
+        username = var.user_account.username
+        keys     = var.user_account.keys
+        password = var.user_account.password
+      }
+    }
   }
 
   lifecycle {

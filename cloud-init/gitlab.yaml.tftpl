@@ -28,10 +28,7 @@ write_files:
   - path: /etc/gitlab-bootstrap.env
     permissions: "0600"
     content: |
-      EXTERNAL_URL=${jsonencode(external_url)}
-      GITLAB_EDITION=${jsonencode(gitlab_edition)}
-      GITLAB_ROOT_PASSWORD=${jsonencode(root_password)}
-      GITLAB_AUTOMATION_TOKEN=${jsonencode(automation_token)}
+      ${indent(6, gitlab_env)}
   - path: /usr/local/sbin/install-gitlab.sh
     permissions: "0755"
     content: |

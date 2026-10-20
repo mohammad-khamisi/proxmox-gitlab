@@ -12,6 +12,12 @@ output "gitlab_root_password" {
   sensitive   = true
 }
 
+output "vm_user_password" {
+  description = "Password of vm_user for the Proxmox web console (use_snippets = false)"
+  value       = var.use_snippets ? null : random_password.vm_user.result
+  sensitive   = true
+}
+
 output "gitlab_ssh" {
   value = "ssh ${var.vm_user}@${module.gitlab.ip}"
 }

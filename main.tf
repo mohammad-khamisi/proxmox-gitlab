@@ -9,14 +9,22 @@ locals {
   gitlab_memory_mb = coalesce(var.gitlab_vm.memory_mb, local.single ? 12288 : 8192)
   gitlab_disk_gb   = coalesce(var.gitlab_vm.disk_gb, local.single ? 80 : 50)
 
+  # Runner name/description: the GitLab VM itself in single mode.
+  runner_name = local.single ? var.gitlab_vm.name : try(var.runner_vm.name, "")
+
+  # Without node SSH the disk must be imported through the API (import_from),
+  # which needs an image of 'import' content type.
+  image_content_type = var.use_snippets ? "iso" : "import"
+  ubuntu_image_import = (
+    var.ubuntu_image_file_id != ""
+    ? strcontains(var.ubuntu_image_file_id, ":import/")
+    : local.image_content_type == "import"
+  )
   ubuntu_image_file_id = (
     var.ubuntu_image_file_id != ""
     ? var.ubuntu_image_file_id
-    : proxmox_virtual_environment_download_file.ubuntu[0].id
+    : proxmox_download_file.ubuntu[0].id
   )
-
-  # Runner name/description: the GitLab VM itself in single mode.
-  runner_name = local.single ? var.gitlab_vm.name : try(var.runner_vm.name, "")
 }
 
 resource "terraform_data" "validate_inputs" {
@@ -24,6 +32,10 @@ resource "terraform_data" "validate_inputs" {
     precondition {
       condition     = local.single || var.runner_vm != null
       error_message = "runner_vm must be set when deployment_mode = \"separate\"."
+    }
+    precondition {
+      condition     = var.use_snippets || var.ubuntu_image_file_id == "" || strcontains(var.ubuntu_image_file_id, ":import/")
+      error_message = "With use_snippets = false the image must be of 'import' content type (e.g. iso:import/noble-server-cloudimg-amd64.qcow2); importing from ':iso/' needs SSH to the node."
     }
   }
 }
@@ -40,19 +52,30 @@ resource "random_password" "gitlab_automation_token" {
   special = false
 }
 
+# Console password for vm_user (Proxmox web console), used when cloud-init
+# snippets are not available.
+resource "random_password" "vm_user" {
+  length  = 20
+  special = false
+}
+
 locals {
   gitlab_automation_token = "glpat-${random_password.gitlab_automation_token.result}"
 
-  gitlab_template_vars = {
+  # Strip CR so files checked out with Windows line endings still run on Linux.
+  scripts = {
+    for name in ["install-gitlab.sh", "gitlab-bootstrap.rb", "install-runner.sh", "provision.sh"] :
+    name => replace(file("${path.module}/scripts/${name}"), "\r", "")
+  }
+
+  gitlab_env = replace(templatefile("${path.module}/cloud-init/gitlab.env.tftpl", {
     external_url     = local.gitlab_external_url
     gitlab_edition   = var.gitlab_edition
     root_password    = random_password.gitlab_root.result
     automation_token = local.gitlab_automation_token
-    gitlab_script    = file("${path.module}/scripts/install-gitlab.sh")
-    bootstrap_rb     = file("${path.module}/scripts/gitlab-bootstrap.rb")
-  }
+  }), "\r", "")
 
-  runner_template_vars = {
+  runner_env = replace(templatefile("${path.module}/cloud-init/runner.env.tftpl", {
     gitlab_url        = local.gitlab_external_url
     automation_token  = local.gitlab_automation_token
     runner_name       = local.runner_name
@@ -60,13 +83,24 @@ locals {
     runner_concurrent = var.runner_concurrent
     docker_image      = var.runner_docker_image
     docker_privileged = var.runner_docker_privileged
-    runner_script     = file("${path.module}/scripts/install-runner.sh")
-  }
+  }), "\r", "")
 
   common_template_vars = {
     vm_user         = var.vm_user
     ssh_public_keys = var.ssh_public_keys
     timezone        = var.timezone
+    gitlab_env      = local.gitlab_env
+    runner_env      = local.runner_env
+    gitlab_script   = local.scripts["install-gitlab.sh"]
+    bootstrap_rb    = local.scripts["gitlab-bootstrap.rb"]
+    runner_script   = local.scripts["install-runner.sh"]
+  }
+
+  # Built-in Proxmox cloud-init user, used instead of custom user-data.
+  vm_user_account = {
+    username = var.vm_user
+    keys     = var.ssh_public_keys
+    password = random_password.vm_user.result
   }
 }
 
@@ -74,21 +108,25 @@ locals {
 # Ubuntu cloud image (downloaded once onto the node, unless an existing
 # image is given in ubuntu_image_file_id)
 # ---------------------------------------------------------------------------
-resource "proxmox_virtual_environment_download_file" "ubuntu" {
+resource "proxmox_download_file" "ubuntu" {
   count = var.ubuntu_image_file_id == "" ? 1 : 0
 
-  content_type = "iso"
+  content_type = local.image_content_type
   datastore_id = var.image_datastore
   node_name    = var.proxmox_node
   url          = var.ubuntu_image_url
-  file_name    = "noble-server-cloudimg-amd64.img"
-  overwrite    = false
+  # 'import' content needs a disk-format extension; the Ubuntu .img is qcow2.
+  file_name = var.use_snippets ? "noble-server-cloudimg-amd64.img" : "noble-server-cloudimg-amd64.qcow2"
+  overwrite = false
 }
 
 # ---------------------------------------------------------------------------
-# Cloud-init user-data snippets
+# Cloud-init user-data snippets (only with use_snippets = true; needs SSH to
+# the Proxmox node)
 # ---------------------------------------------------------------------------
 resource "proxmox_virtual_environment_file" "gitlab_user_data" {
+  count = var.use_snippets ? 1 : 0
+
   content_type = "snippets"
   datastore_id = var.snippets_datastore
   node_name    = var.proxmox_node
@@ -97,18 +135,13 @@ resource "proxmox_virtual_environment_file" "gitlab_user_data" {
     file_name = "${var.gitlab_vm.name}-user-data.yaml"
     data = templatefile(
       "${path.module}/cloud-init/${local.single ? "all-in-one" : "gitlab"}.yaml.tftpl",
-      merge(
-        local.common_template_vars,
-        local.gitlab_template_vars,
-        local.single ? local.runner_template_vars : {},
-        { hostname = var.gitlab_vm.name },
-      )
+      merge(local.common_template_vars, { hostname = var.gitlab_vm.name })
     )
   }
 }
 
 resource "proxmox_virtual_environment_file" "runner_user_data" {
-  count = local.single ? 0 : 1
+  count = var.use_snippets && !local.single ? 1 : 0
 
   content_type = "snippets"
   datastore_id = var.snippets_datastore
@@ -118,11 +151,7 @@ resource "proxmox_virtual_environment_file" "runner_user_data" {
     file_name = "${var.runner_vm.name}-user-data.yaml"
     data = templatefile(
       "${path.module}/cloud-init/runner.yaml.tftpl",
-      merge(
-        local.common_template_vars,
-        local.runner_template_vars,
-        { hostname = var.runner_vm.name },
-      )
+      merge(local.common_template_vars, { hostname = var.runner_vm.name })
     )
   }
 }
@@ -143,12 +172,15 @@ module "gitlab" {
   disk_gb           = local.gitlab_disk_gb
   datastore_id      = var.vm_datastore
   image_file_id     = local.ubuntu_image_file_id
+  image_import      = local.ubuntu_image_import
   bridge            = var.network_bridge
   vlan_id           = var.vlan_id
   ip_cidr           = var.gitlab_vm.ip
   gateway           = var.gateway
   dns_servers       = var.dns_servers
-  user_data_file_id = proxmox_virtual_environment_file.gitlab_user_data.id
+  agent_enabled     = var.use_snippets
+  user_data_file_id = var.use_snippets ? proxmox_virtual_environment_file.gitlab_user_data[0].id : null
+  user_account      = var.use_snippets ? null : local.vm_user_account
 }
 
 module "runner" {
@@ -165,13 +197,51 @@ module "runner" {
   disk_gb           = var.runner_vm.disk_gb
   datastore_id      = var.vm_datastore
   image_file_id     = local.ubuntu_image_file_id
+  image_import      = local.ubuntu_image_import
   bridge            = var.network_bridge
   vlan_id           = var.vlan_id
   ip_cidr           = var.runner_vm.ip
   gateway           = var.gateway
   dns_servers       = var.dns_servers
-  user_data_file_id = proxmox_virtual_environment_file.runner_user_data[0].id
+  agent_enabled     = var.use_snippets
+  user_data_file_id = var.use_snippets ? proxmox_virtual_environment_file.runner_user_data[0].id : null
+  user_account      = var.use_snippets ? null : local.vm_user_account
 
   # The runner registers itself against GitLab on first boot.
   depends_on = [module.gitlab]
+}
+
+# ---------------------------------------------------------------------------
+# Provisioning over SSH to the VMs (only with use_snippets = false)
+# ---------------------------------------------------------------------------
+module "provision_gitlab" {
+  source = "./modules/provision"
+  count  = var.use_snippets ? 0 : 1
+
+  vm_id            = module.gitlab.vm_id
+  host             = module.gitlab.ip
+  user             = var.vm_user
+  private_key_path = var.vm_ssh_private_key_path
+  timezone         = var.timezone
+  roles            = local.single ? ["gitlab", "runner"] : ["gitlab"]
+  scripts          = local.scripts
+  gitlab_env       = local.gitlab_env
+  runner_env       = local.single ? local.runner_env : ""
+}
+
+module "provision_runner" {
+  source = "./modules/provision"
+  count  = !var.use_snippets && !local.single ? 1 : 0
+
+  vm_id            = module.runner[0].vm_id
+  host             = module.runner[0].ip
+  user             = var.vm_user
+  private_key_path = var.vm_ssh_private_key_path
+  timezone         = var.timezone
+  roles            = ["runner"]
+  scripts          = local.scripts
+  gitlab_env       = ""
+  runner_env       = local.runner_env
+
+  depends_on = [module.provision_gitlab]
 }
