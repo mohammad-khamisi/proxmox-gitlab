@@ -42,7 +42,8 @@
 ### ۱. استوریج‌ها (از پنل وب: Datacenter → Storage)
 
 - **دیسک VM:** پیش‌فرض روی `iscsi-netapp` ساخته می‌شود (`vm_datastore`). این استوریج باید از نوع **LVM** (روی iSCSI) یا هر نوعی با محتوای `Disk image` باشد؛ استوریج خام از نوع `iSCSI` فقط LUN را نشان می‌دهد و نمی‌توان روی آن دیسک ساخت.
-- **ایمیج ابونتو** (حالت پیش‌فرض): روی یک استوریج فایلی (مثلاً `local` یا `iso`) باید محتوای **Import** فعال باشد (Datacenter → Storage → Edit → Content → `Import`). دو راه دارید:
+- **ساده‌ترین راه: کلون از template.** اگر در کلاستر یک template ابونتو با cloud-init دارید (مثلاً `901`)، بنویسید `clone_template_id = 901`. فقط با API کار می‌کند و به ایمیج، محتوای `Import` و SSH نیازی ندارد. در تب **Hardware** همان template ببینید دیسک اصلی `scsi0` است یا `virtio0` و در `clone_disk_interface` بگذارید.
+- **ایمیج ابونتو** (اگر template ندارید): روی یک استوریج فایلی (مثلاً `local` یا `iso`) باید محتوای **Import** فعال باشد (Datacenter → Storage → Edit → Content → `Import`). دو راه دارید:
   - Terraform خودش دانلود کند: `image_datastore = "<نام استوریج>"` (دسترسی `Datastore.AllocateTemplate` روی آن استوریج لازم است).
   - یا خودتان در پنل وب ایمیج را آپلود کنید: نود → استوریج → **Import** → **Download from URL** با آدرس
     `https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img`
@@ -118,6 +119,8 @@ sudo cat /var/log/cloud-init-output.log
 | `proxmox_node` | `pve` | نام نود |
 | `vm_datastore` | `iscsi-netapp` | محل دیسک VMها |
 | `image_datastore` | `local` | محل ایمیج cloud ابونتو |
+| `clone_template_id` | `null` | شماره‌ی template ابونتو برای کلون (مثلاً `901`)؛ در این حالت ایمیج لازم نیست |
+| `clone_disk_interface` | `scsi0` | رابط دیسک اصلی template (`scsi0` یا `virtio0`) |
 | `ubuntu_image_file_id` | `""` | اگر ایمیج را خودتان آپلود کرده‌اید، مثلاً `iso:import/noble-server-cloudimg-amd64.qcow2`؛ در این حالت چیزی دانلود نمی‌شود |
 | `snippets_datastore` | `local` | datastore با قابلیت snippets |
 | `network_bridge` | `vmbr0` | bridge شبکه |

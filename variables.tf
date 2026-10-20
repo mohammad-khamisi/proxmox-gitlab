@@ -87,14 +87,41 @@ variable "vlan_id" {
 }
 
 variable "gateway" {
-  description = "Default IPv4 gateway for the VMs"
+  description = "Default IPv4 gateway for the VMs (plain IP, no /prefix)"
   type        = string
+
+  validation {
+    condition     = can(regex("^\\d+\\.\\d+\\.\\d+\\.\\d+$", var.gateway))
+    error_message = "gateway must be a plain IP without /prefix, e.g. 10.100.128.1 (the /24 belongs in gitlab_vm.ip)."
+  }
 }
 
 variable "dns_servers" {
   description = "DNS servers for the VMs"
   type        = list(string)
   default     = ["1.1.1.1", "8.8.8.8"]
+}
+
+variable "clone_template_id" {
+  description = <<-EOT
+    VM ID of an existing Ubuntu cloud-init template to full-clone (e.g. 901).
+    Uses only the Proxmox API: no image download, no 'import' content, no SSH
+    to the node. When set, the ubuntu_image_* settings are ignored.
+  EOT
+  type        = number
+  default     = null
+}
+
+variable "clone_template_node" {
+  description = "Node holding the template (empty = proxmox_node)"
+  type        = string
+  default     = ""
+}
+
+variable "clone_disk_interface" {
+  description = "Interface of the template's boot disk, as shown in its Hardware tab (scsi0, virtio0, ...)"
+  type        = string
+  default     = "scsi0"
 }
 
 variable "ubuntu_image_file_id" {

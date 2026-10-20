@@ -26,7 +26,12 @@ vm_ssh_private_key_path = "~/.ssh/id_ed25519"
 # VM disks on the NetApp iSCSI storage (LVM over iSCSI).
 vm_datastore = "iscsi-netapp"
 
-# Ubuntu cloud image. With use_snippets = false it must be of 'import' content
+# Easiest: full-clone an existing Ubuntu cloud-init template (API only, no image
+# needed). Check the template's Hardware tab for the boot disk interface.
+# clone_template_id    = 901
+# clone_disk_interface = "scsi0"
+
+# Otherwise an Ubuntu cloud image. With use_snippets = false it must be of 'import' content
 # type. Either let Terraform download it to image_datastore (needs 'Import'
 # content enabled there) ...
 image_datastore = "local"

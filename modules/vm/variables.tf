@@ -13,10 +13,29 @@ variable "cores" { type = number }
 variable "memory_mb" { type = number }
 variable "disk_gb" { type = number }
 variable "datastore_id" { type = string }
-variable "image_file_id" { type = string }
+variable "image_file_id" {
+  type    = string
+  default = null
+}
 variable "image_import" {
   description = "true = image is '<storage>:import/<file>', imported via the API (import_from); false = file_id, imported via SSH to the node"
   type        = bool
+  default     = true
+}
+variable "clone_vm_id" {
+  description = "Template VM ID to full-clone instead of importing an image"
+  type        = number
+  default     = null
+}
+variable "clone_node_name" {
+  description = "Node holding the template (null = same node)"
+  type        = string
+  default     = null
+}
+variable "clone_disk_interface" {
+  description = "Interface of the template's boot disk (see the template's Hardware tab)"
+  type        = string
+  default     = "scsi0"
 }
 variable "bridge" { type = string }
 variable "vlan_id" {

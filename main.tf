@@ -14,6 +14,7 @@ locals {
 
   # Without node SSH the disk must be imported through the API (import_from),
   # which needs an image of 'import' content type.
+  cloning            = var.clone_template_id != null
   image_content_type = var.use_snippets ? "iso" : "import"
   ubuntu_image_import = (
     var.ubuntu_image_file_id != ""
@@ -21,8 +22,8 @@ locals {
     : local.image_content_type == "import"
   )
   ubuntu_image_file_id = (
-    var.ubuntu_image_file_id != ""
-    ? var.ubuntu_image_file_id
+    local.cloning ? null
+    : var.ubuntu_image_file_id != "" ? var.ubuntu_image_file_id
     : proxmox_download_file.ubuntu[0].id
   )
 }
@@ -34,7 +35,7 @@ resource "terraform_data" "validate_inputs" {
       error_message = "runner_vm must be set when deployment_mode = \"separate\"."
     }
     precondition {
-      condition     = var.use_snippets || var.ubuntu_image_file_id == "" || strcontains(var.ubuntu_image_file_id, ":import/")
+      condition     = local.cloning || var.use_snippets || var.ubuntu_image_file_id == "" || strcontains(var.ubuntu_image_file_id, ":import/")
       error_message = "With use_snippets = false the image must be of 'import' content type (e.g. iso:import/noble-server-cloudimg-amd64.qcow2); importing from ':iso/' needs SSH to the node."
     }
   }
@@ -109,7 +110,7 @@ locals {
 # image is given in ubuntu_image_file_id)
 # ---------------------------------------------------------------------------
 resource "proxmox_download_file" "ubuntu" {
-  count = var.ubuntu_image_file_id == "" ? 1 : 0
+  count = !local.cloning && var.ubuntu_image_file_id == "" ? 1 : 0
 
   content_type = local.image_content_type
   datastore_id = var.image_datastore
@@ -162,50 +163,56 @@ resource "proxmox_virtual_environment_file" "runner_user_data" {
 module "gitlab" {
   source = "./modules/vm"
 
-  name              = var.gitlab_vm.name
-  vm_id             = var.gitlab_vm.vm_id
-  node_name         = var.proxmox_node
-  description       = local.single ? "GitLab server + GitLab Runner (managed by Terraform)" : "GitLab server (managed by Terraform)"
-  tags              = local.single ? ["terraform", "gitlab", "gitlab-runner"] : ["terraform", "gitlab"]
-  cores             = local.gitlab_cores
-  memory_mb         = local.gitlab_memory_mb
-  disk_gb           = local.gitlab_disk_gb
-  datastore_id      = var.vm_datastore
-  image_file_id     = local.ubuntu_image_file_id
-  image_import      = local.ubuntu_image_import
-  bridge            = var.network_bridge
-  vlan_id           = var.vlan_id
-  ip_cidr           = var.gitlab_vm.ip
-  gateway           = var.gateway
-  dns_servers       = var.dns_servers
-  agent_enabled     = var.use_snippets
-  user_data_file_id = var.use_snippets ? proxmox_virtual_environment_file.gitlab_user_data[0].id : null
-  user_account      = var.use_snippets ? null : local.vm_user_account
+  name                 = var.gitlab_vm.name
+  vm_id                = var.gitlab_vm.vm_id
+  node_name            = var.proxmox_node
+  description          = local.single ? "GitLab server + GitLab Runner (managed by Terraform)" : "GitLab server (managed by Terraform)"
+  tags                 = local.single ? ["terraform", "gitlab", "gitlab-runner"] : ["terraform", "gitlab"]
+  cores                = local.gitlab_cores
+  memory_mb            = local.gitlab_memory_mb
+  disk_gb              = local.gitlab_disk_gb
+  datastore_id         = var.vm_datastore
+  image_file_id        = local.ubuntu_image_file_id
+  image_import         = local.ubuntu_image_import
+  clone_vm_id          = var.clone_template_id
+  clone_node_name      = var.clone_template_node != "" ? var.clone_template_node : null
+  clone_disk_interface = var.clone_disk_interface
+  bridge               = var.network_bridge
+  vlan_id              = var.vlan_id
+  ip_cidr              = var.gitlab_vm.ip
+  gateway              = var.gateway
+  dns_servers          = var.dns_servers
+  agent_enabled        = var.use_snippets
+  user_data_file_id    = var.use_snippets ? proxmox_virtual_environment_file.gitlab_user_data[0].id : null
+  user_account         = var.use_snippets ? null : local.vm_user_account
 }
 
 module "runner" {
   source = "./modules/vm"
   count  = local.single ? 0 : 1
 
-  name              = var.runner_vm.name
-  vm_id             = var.runner_vm.vm_id
-  node_name         = var.proxmox_node
-  description       = "GitLab Runner for ${local.gitlab_external_url} (managed by Terraform)"
-  tags              = ["terraform", "gitlab-runner"]
-  cores             = var.runner_vm.cores
-  memory_mb         = var.runner_vm.memory_mb
-  disk_gb           = var.runner_vm.disk_gb
-  datastore_id      = var.vm_datastore
-  image_file_id     = local.ubuntu_image_file_id
-  image_import      = local.ubuntu_image_import
-  bridge            = var.network_bridge
-  vlan_id           = var.vlan_id
-  ip_cidr           = var.runner_vm.ip
-  gateway           = var.gateway
-  dns_servers       = var.dns_servers
-  agent_enabled     = var.use_snippets
-  user_data_file_id = var.use_snippets ? proxmox_virtual_environment_file.runner_user_data[0].id : null
-  user_account      = var.use_snippets ? null : local.vm_user_account
+  name                 = var.runner_vm.name
+  vm_id                = var.runner_vm.vm_id
+  node_name            = var.proxmox_node
+  description          = "GitLab Runner for ${local.gitlab_external_url} (managed by Terraform)"
+  tags                 = ["terraform", "gitlab-runner"]
+  cores                = var.runner_vm.cores
+  memory_mb            = var.runner_vm.memory_mb
+  disk_gb              = var.runner_vm.disk_gb
+  datastore_id         = var.vm_datastore
+  image_file_id        = local.ubuntu_image_file_id
+  image_import         = local.ubuntu_image_import
+  clone_vm_id          = var.clone_template_id
+  clone_node_name      = var.clone_template_node != "" ? var.clone_template_node : null
+  clone_disk_interface = var.clone_disk_interface
+  bridge               = var.network_bridge
+  vlan_id              = var.vlan_id
+  ip_cidr              = var.runner_vm.ip
+  gateway              = var.gateway
+  dns_servers          = var.dns_servers
+  agent_enabled        = var.use_snippets
+  user_data_file_id    = var.use_snippets ? proxmox_virtual_environment_file.runner_user_data[0].id : null
+  user_account         = var.use_snippets ? null : local.vm_user_account
 
   # The runner registers itself against GitLab on first boot.
   depends_on = [module.gitlab]
