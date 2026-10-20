@@ -10,6 +10,11 @@ variable "proxmox_api_token" {
   description = "API token in the form 'user@realm!tokenid=uuid'"
   type        = string
   sensitive   = true
+
+  validation {
+    condition     = can(regex("^[^@\\s]+@[^!\\s]+![^=\\s]+=[0-9a-fA-F-]{36}$", var.proxmox_api_token))
+    error_message = "proxmox_api_token must look like root@pam!terraform=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (user@realm!tokenid=secret, no spaces)."
+  }
 }
 
 variable "proxmox_insecure" {
