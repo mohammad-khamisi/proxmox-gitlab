@@ -1,3 +1,7 @@
+output "deployment_mode" {
+  value = var.deployment_mode
+}
+
 output "gitlab_url" {
   value = local.gitlab_external_url
 }
@@ -13,5 +17,6 @@ output "gitlab_ssh" {
 }
 
 output "runner_ssh" {
-  value = "ssh ${var.vm_user}@${module.runner.ip}"
+  description = "Same as gitlab_ssh in single mode"
+  value       = local.single ? "ssh ${var.vm_user}@${module.gitlab.ip}" : "ssh ${var.vm_user}@${module.runner[0].ip}"
 }

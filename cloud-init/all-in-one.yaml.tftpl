@@ -1,0 +1,67 @@
+#cloud-config
+# GitLab server and GitLab Runner (docker executor) on the same VM.
+hostname: ${hostname}
+manage_etc_hosts: true
+timezone: ${timezone}
+
+users:
+  - name: ${vm_user}
+    groups: [sudo]
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: true
+    ssh_authorized_keys:
+%{ for key in ssh_public_keys ~}
+      - ${key}
+%{ endfor ~}
+
+package_update: true
+package_upgrade: true
+packages:
+  - qemu-guest-agent
+  - curl
+  - ca-certificates
+  - openssh-server
+  - tzdata
+  - perl
+  - jq
+  - docker.io
+
+write_files:
+  - path: /etc/gitlab-bootstrap.env
+    permissions: "0600"
+    content: |
+      EXTERNAL_URL=${jsonencode(external_url)}
+      GITLAB_EDITION=${jsonencode(gitlab_edition)}
+      GITLAB_ROOT_PASSWORD=${jsonencode(root_password)}
+      GITLAB_AUTOMATION_TOKEN=${jsonencode(automation_token)}
+  - path: /etc/gitlab-runner-bootstrap.env
+    permissions: "0600"
+    content: |
+      GITLAB_URL=${jsonencode(gitlab_url)}
+      GITLAB_AUTOMATION_TOKEN=${jsonencode(automation_token)}
+      RUNNER_NAME=${jsonencode(runner_name)}
+      RUNNER_TAGS=${jsonencode(runner_tags)}
+      RUNNER_CONCURRENT=${runner_concurrent}
+      RUNNER_DOCKER_IMAGE=${jsonencode(docker_image)}
+      RUNNER_DOCKER_PRIVILEGED=${docker_privileged}
+  - path: /usr/local/sbin/install-gitlab.sh
+    permissions: "0755"
+    content: |
+      ${indent(6, gitlab_script)}
+  - path: /usr/local/share/gitlab-bootstrap.rb
+    permissions: "0600"
+    content: |
+      ${indent(6, bootstrap_rb)}
+  - path: /usr/local/sbin/install-runner.sh
+    permissions: "0755"
+    content: |
+      ${indent(6, runner_script)}
+
+runcmd:
+  - systemctl enable --now qemu-guest-agent
+  - systemctl enable --now docker
+  # GitLab first; the runner then registers against it (external URL, not
+  # localhost, so job containers can reach it for git clone).
+  - /usr/local/sbin/install-gitlab.sh > /var/log/install-gitlab.log 2>&1
+  - /usr/local/sbin/install-runner.sh > /var/log/install-runner.log 2>&1

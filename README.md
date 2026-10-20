@@ -1,11 +1,13 @@
 # proxmox-gitlab
 
-با Terraform (یا OpenTofu) دو ماشین مجازی روی Proxmox می‌سازد:
+با Terraform (یا OpenTofu) روی Proxmox یک سرور GitLab CE به‌همراه GitLab Runner (با executor داکر) بالا می‌آورد. Runner **خودکار** به همین GitLab وصل (register) می‌شود. سیستم‌عامل Ubuntu 24.04 است.
 
-| VM | کار |
-|----|-----|
-| `gitlab` | سرور GitLab CE (Omnibus) روی Ubuntu 24.04 |
-| `gitlab-runner` | GitLab Runner با executor نوع Docker که **خودکار** به همین GitLab وصل (register) می‌شود |
+دو حالت استقرار دارد (متغیر `deployment_mode`):
+
+| حالت | توضیح |
+|------|-------|
+| `single` (پیش‌فرض) | GitLab و Runner هر دو روی **یک VM** |
+| `separate` | یک VM برای GitLab و یک VM جدا برای Runner |
 
 همه چیز با cloud-init انجام می‌شود و کار دستی لازم نیست؛ بعد از `terraform apply` حدود ۱۰ تا ۲۰ دقیقه طول می‌کشد تا GitLab بالا بیاید و Runner خودش ثبت شود.
 
@@ -13,18 +15,33 @@
 
 1. ایمیج cloud ابونتو 24.04 روی نود Proxmox دانلود می‌شود.
 2. فایل user-data هر VM به‌صورت snippet روی Proxmox آپلود می‌شود.
-3. **VM گیت‌لب:** GitLab نصب می‌شود، رمز اولیه‌ی `root` تنظیم می‌شود و یک Personal Access Token با scope `create_runner` ساخته می‌شود (مقدار توکن را Terraform تولید می‌کند). ثبت‌نام عمومی (sign-up) هم غیرفعال می‌شود.
-4. **VM رانر:** Docker و `gitlab-runner` نصب می‌شوند، صبر می‌کند تا GitLab آماده شود، با API یک instance runner می‌سازد (`POST /api/v4/user/runners`) و با توکن `glrt-...` دستور `gitlab-runner register` را اجرا می‌کند.
-5. بعد از ثبت، توکن‌ها و رمزها از روی دیسک هر دو VM پاک می‌شوند.
+3. **GitLab:** GitLab نصب می‌شود، رمز اولیه‌ی `root` تنظیم می‌شود و یک Personal Access Token با scope `create_runner` ساخته می‌شود (مقدار توکن را Terraform تولید می‌کند). ثبت‌نام عمومی (sign-up) هم غیرفعال می‌شود.
+4. **Runner** (در حالت `single` روی همان VM و بعد از نصب GitLab): Docker و `gitlab-runner` نصب می‌شوند، صبر می‌کند تا GitLab آماده شود، با API یک instance runner می‌سازد (`POST /api/v4/user/runners`) و با توکن `glrt-...` دستور `gitlab-runner register` را اجرا می‌کند.
+5. بعد از ثبت، توکن‌ها و رمزها از روی دیسک پاک می‌شوند.
+
+> در حالت `single` آدرس GitLab برای Runner همان IP خود VM است (نه `localhost`)، چون کانتینرهای job برای `git clone` باید به GitLab دسترسی داشته باشند.
 
 ## پیش‌نیازها
 
 - Terraform نسخه‌ی 1.5 به بالا یا OpenTofu
 - Proxmox VE نسخه‌ی 8 یا بالاتر
 - دسترسی SSH به نود Proxmox (provider فایل‌های snippet را از طریق SSH آپلود می‌کند)
-- دو IP ثابت آزاد در شبکه‌ی شما
+- یک IP ثابت آزاد (در حالت `separate` دو IP)
 
-### ۱. فعال کردن snippets روی datastore
+### ۱. استوریج‌ها
+
+- **دیسک VM:** پیش‌فرض روی `iscsi-netapp` ساخته می‌شود (`vm_datastore`).
+  این استوریج باید از نوع **LVM روی iSCSI** (یا هر نوعی با محتوای `images`) باشد. استوریج خام از نوع `iscsi` فقط LUN را نشان می‌دهد و نمی‌توان روی آن دیسک ساخت. نوع و محتوای آن را با این دستور ببینید:
+
+  ```bash
+  pvesm status
+  grep -A6 'iscsi-netapp' /etc/pve/storage.cfg
+  ```
+
+  اگر نوعش `iscsi` است (نه `lvm`)، یک LVM روی آن LUN بسازید و در `vm_datastore` نام همان LVM را بگذارید.
+- **ایمیج و snippetها:** iSCSI/LVM از فایل پشتیبانی نمی‌کند، پس ایمیج cloud و فایل‌های cloud-init روی یک استوریج فایلی مثل `local` می‌مانند (`image_datastore`، `snippets_datastore`).
+
+### ۲. فعال کردن snippets روی datastore
 
 روی نود Proxmox اجرا کنید:
 
@@ -32,7 +49,7 @@
 pvesm set local --content iso,vztmpl,backup,snippets
 ```
 
-### ۲. ساخت کاربر و API Token برای Terraform
+### ۳. ساخت کاربر و API Token برای Terraform
 
 ```bash
 pveum role add TerraformProv -privs "Datastore.Allocate Datastore.AllocateSpace Datastore.AllocateTemplate Datastore.Audit Pool.Allocate Sys.Audit Sys.Console Sys.Modify VM.Allocate VM.Audit VM.Clone VM.Config.CDROM VM.Config.Cloudinit VM.Config.CPU VM.Config.Disk VM.Config.HWType VM.Config.Memory VM.Config.Network VM.Config.Options VM.Migrate VM.PowerMgmt SDN.Use"
@@ -52,7 +69,7 @@ git clone https://github.com/mohammad-khamisi/proxmox-gitlab.git
 cd proxmox-gitlab
 
 cp terraform.tfvars.example terraform.tfvars
-# مقادیر terraform.tfvars را ویرایش کنید (آدرس Proxmox، توکن، IPها، کلید SSH)
+# مقادیر terraform.tfvars را ویرایش کنید (آدرس Proxmox، توکن، IP، کلید SSH)
 
 eval "$(ssh-agent)" && ssh-add ~/.ssh/id_ed25519   # برای SSH به نود Proxmox
 
@@ -68,7 +85,7 @@ terraform output gitlab_url
 terraform output -raw gitlab_root_password    # رمز کاربر root در GitLab
 ```
 
-با کاربر `root` و این رمز وارد GitLab شوید. در مسیر **Admin → CI/CD → Runners** باید رانر `gitlab-runner` را با وضعیت سبز (online) ببینید.
+با کاربر `root` و این رمز وارد GitLab شوید. در مسیر **Admin → CI/CD → Runners** باید رانر (در حالت `single` با نام همان VM، مثلاً `gitlab`) را با وضعیت سبز (online) ببینید.
 
 ## تست رانر
 
@@ -77,13 +94,12 @@ terraform output -raw gitlab_root_password    # رمز کاربر root در GitL
 ## عیب‌یابی
 
 ```bash
-# روی VM گیت‌لب
+# GitLab (در حالت single هر دو روی همین VM)
 ssh ubuntu@<gitlab-ip>
 sudo tail -f /var/log/install-gitlab.log
 sudo gitlab-ctl status
 
-# روی VM رانر
-ssh ubuntu@<runner-ip>
+# Runner (در حالت separate روی VM رانر)
 sudo tail -f /var/log/install-runner.log
 sudo gitlab-runner verify
 sudo cat /var/log/cloud-init-output.log
@@ -93,20 +109,24 @@ sudo cat /var/log/cloud-init-output.log
 
 | متغیر | پیش‌فرض | توضیح |
 |-------|---------|-------|
+| `deployment_mode` | `single` | `single` یا `separate` |
 | `proxmox_node` | `pve` | نام نود |
-| `vm_datastore` | `local-lvm` | محل دیسک VMها |
+| `vm_datastore` | `iscsi-netapp` | محل دیسک VMها |
+| `image_datastore` | `local` | محل ایمیج cloud ابونتو |
 | `snippets_datastore` | `local` | datastore با قابلیت snippets |
 | `network_bridge` | `vmbr0` | bridge شبکه |
 | `vlan_id` | `null` | تگ VLAN (اختیاری) |
-| `gitlab_vm` | - | `vm_id`، `name`، `ip` (CIDR)، `cores`=4، `memory_mb`=8192، `disk_gb`=50 |
-| `runner_vm` | - | `vm_id`، `name`، `ip` (CIDR)، `cores`=2، `memory_mb`=4096، `disk_gb`=40 |
+| `gitlab_vm` | - | `vm_id`، `name`، `ip` (CIDR)، `cores`، `memory_mb`، `disk_gb` — پیش‌فرض منابع: در `single` برابر 6 هسته / 12GB / 80GB و در `separate` برابر 4 / 8GB / 50GB |
+| `runner_vm` | `null` | فقط در `separate`: `vm_id`، `name`، `ip`، `cores`=2، `memory_mb`=4096، `disk_gb`=40 |
 | `gitlab_external_url` | `http://<gitlab ip>` | آدرس GitLab (مثلاً با دامنه) |
 | `gitlab_edition` | `gitlab-ce` | `gitlab-ce` یا `gitlab-ee` |
 | `runner_tags` | `["docker","proxmox"]` | تگ‌های رانر |
 | `runner_concurrent` | `2` | تعداد jobهای هم‌زمان |
 | `runner_docker_privileged` | `false` | برای docker-in-docker برابر `true` بگذارید |
 
-> GitLab حداقل ۴ گیگابایت رم لازم دارد؛ ۸ گیگابایت توصیه می‌شود.
+> GitLab به‌تنهایی حداقل ۴ گیگابایت رم لازم دارد. در حالت `single` jobهای CI هم روی همان VM اجرا می‌شوند، برای همین منابع بیشتری در نظر گرفته شده است.
+>
+> **امنیت:** در حالت `single` jobها روی همان سرور GitLab اجرا می‌شوند. اگر `runner_docker_privileged = true` باشد، هر job عملاً به کل سرور دسترسی دارد. برای محیط production حالت `separate` بهتر است.
 
 ## ساختار پروژه
 
@@ -114,10 +134,11 @@ sudo cat /var/log/cloud-init-output.log
 .
 ├── versions.tf               # providerها (bpg/proxmox, random)
 ├── variables.tf
-├── main.tf                   # ایمیج، snippetها و دو VM
+├── main.tf                   # ایمیج، snippetها و VMها
 ├── outputs.tf
 ├── modules/vm/               # ماژول ساخت VM روی Proxmox
 ├── cloud-init/
+│   ├── all-in-one.yaml.tftpl # حالت single
 │   ├── gitlab.yaml.tftpl
 │   └── runner.yaml.tftpl
 ├── scripts/

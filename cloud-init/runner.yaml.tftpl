@@ -29,7 +29,7 @@ write_files:
     content: |
       GITLAB_URL=${jsonencode(gitlab_url)}
       GITLAB_AUTOMATION_TOKEN=${jsonencode(automation_token)}
-      RUNNER_NAME=${jsonencode(hostname)}
+      RUNNER_NAME=${jsonencode(runner_name)}
       RUNNER_TAGS=${jsonencode(runner_tags)}
       RUNNER_CONCURRENT=${runner_concurrent}
       RUNNER_DOCKER_IMAGE=${jsonencode(docker_image)}
@@ -37,7 +37,7 @@ write_files:
   - path: /usr/local/sbin/install-runner.sh
     permissions: "0755"
     content: |
-      ${indent(6, install_script)}
+      ${indent(6, runner_script)}
 
 runcmd:
   - systemctl enable --now qemu-guest-agent

@@ -40,9 +40,9 @@ variable "proxmox_node" {
 # Storage / network
 # ---------------------------------------------------------------------------
 variable "vm_datastore" {
-  description = "Datastore for VM disks and cloud-init drives"
+  description = "Datastore for VM disks and cloud-init drives (must support 'images', e.g. LVM over iSCSI)"
   type        = string
-  default     = "local-lvm"
+  default     = "iscsi-netapp"
 }
 
 variable "image_datastore" {
@@ -107,17 +107,35 @@ variable "timezone" {
 }
 
 # ---------------------------------------------------------------------------
+# Deployment layout
+# ---------------------------------------------------------------------------
+variable "deployment_mode" {
+  description = "'single' = GitLab and Runner on one VM, 'separate' = one VM each"
+  type        = string
+  default     = "single"
+
+  validation {
+    condition     = contains(["single", "separate"], var.deployment_mode)
+    error_message = "deployment_mode must be single or separate."
+  }
+}
+
+# ---------------------------------------------------------------------------
 # GitLab VM
 # ---------------------------------------------------------------------------
 variable "gitlab_vm" {
-  description = "GitLab server VM settings. ip must be in CIDR form, e.g. 192.168.1.50/24"
+  description = <<-EOT
+    GitLab server VM settings. ip must be in CIDR form, e.g. 192.168.1.50/24.
+    Unset sizes default to 6 cores / 12 GB / 80 GB in single mode and
+    4 cores / 8 GB / 50 GB in separate mode.
+  EOT
   type = object({
     vm_id     = number
     name      = string
     ip        = string
-    cores     = optional(number, 4)
-    memory_mb = optional(number, 8192)
-    disk_gb   = optional(number, 50)
+    cores     = optional(number)
+    memory_mb = optional(number)
+    disk_gb   = optional(number)
   })
 }
 
@@ -142,7 +160,7 @@ variable "gitlab_edition" {
 # GitLab Runner VM
 # ---------------------------------------------------------------------------
 variable "runner_vm" {
-  description = "GitLab Runner VM settings. ip must be in CIDR form, e.g. 192.168.1.51/24"
+  description = "GitLab Runner VM settings, only used when deployment_mode = separate. ip must be in CIDR form"
   type = object({
     vm_id     = number
     name      = string
@@ -151,6 +169,7 @@ variable "runner_vm" {
     memory_mb = optional(number, 4096)
     disk_gb   = optional(number, 40)
   })
+  default = null
 }
 
 variable "runner_tags" {

@@ -35,7 +35,7 @@ write_files:
   - path: /usr/local/sbin/install-gitlab.sh
     permissions: "0755"
     content: |
-      ${indent(6, install_script)}
+      ${indent(6, gitlab_script)}
   - path: /usr/local/share/gitlab-bootstrap.rb
     permissions: "0600"
     content: |
