@@ -15,6 +15,10 @@ vm_datastore = "iscsi-netapp"
 image_datastore    = "local"
 snippets_datastore = "local"
 
+# Already uploaded the Ubuntu cloud image yourself? Point to it and skip the
+# download (format: <storage>:iso/<file name>).
+# ubuntu_image_file_id = "iso:iso/noble-server-cloudimg-amd64.img"
+
 network_bridge = "vmbr0"
 gateway        = "192.168.1.1"
 dns_servers    = ["1.1.1.1", "8.8.8.8"]

@@ -113,6 +113,7 @@ sudo cat /var/log/cloud-init-output.log
 | `proxmox_node` | `pve` | نام نود |
 | `vm_datastore` | `iscsi-netapp` | محل دیسک VMها |
 | `image_datastore` | `local` | محل ایمیج cloud ابونتو |
+| `ubuntu_image_file_id` | `""` | اگر ایمیج را خودتان آپلود کرده‌اید، مثلاً `iso:iso/noble-server-cloudimg-amd64.img`؛ در این حالت چیزی دانلود نمی‌شود |
 | `snippets_datastore` | `local` | datastore با قابلیت snippets |
 | `network_bridge` | `vmbr0` | bridge شبکه |
 | `vlan_id` | `null` | تگ VLAN (اختیاری) |

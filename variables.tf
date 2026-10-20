@@ -85,6 +85,21 @@ variable "dns_servers" {
   default     = ["1.1.1.1", "8.8.8.8"]
 }
 
+variable "ubuntu_image_file_id" {
+  description = <<-EOT
+    Existing Ubuntu cloud image already on the node, as '<storage>:iso/<file name>'
+    (e.g. 'iso:iso/noble-server-cloudimg-amd64.img'). When set, nothing is downloaded
+    and image_datastore / ubuntu_image_url are ignored.
+  EOT
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.ubuntu_image_file_id == "" || can(regex("^[^:\\s]+:(iso|import)/[^\\s]+$", var.ubuntu_image_file_id))
+    error_message = "ubuntu_image_file_id must look like <storage>:iso/<file name>, e.g. iso:iso/noble-server-cloudimg-amd64.img."
+  }
+}
+
 variable "ubuntu_image_url" {
   description = "Ubuntu cloud image URL"
   type        = string

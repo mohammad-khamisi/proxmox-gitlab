@@ -9,6 +9,12 @@ locals {
   gitlab_memory_mb = coalesce(var.gitlab_vm.memory_mb, local.single ? 12288 : 8192)
   gitlab_disk_gb   = coalesce(var.gitlab_vm.disk_gb, local.single ? 80 : 50)
 
+  ubuntu_image_file_id = (
+    var.ubuntu_image_file_id != ""
+    ? var.ubuntu_image_file_id
+    : proxmox_virtual_environment_download_file.ubuntu[0].id
+  )
+
   # Runner name/description: the GitLab VM itself in single mode.
   runner_name = local.single ? var.gitlab_vm.name : try(var.runner_vm.name, "")
 }
@@ -65,9 +71,12 @@ locals {
 }
 
 # ---------------------------------------------------------------------------
-# Ubuntu cloud image (downloaded once onto the node)
+# Ubuntu cloud image (downloaded once onto the node, unless an existing
+# image is given in ubuntu_image_file_id)
 # ---------------------------------------------------------------------------
 resource "proxmox_virtual_environment_download_file" "ubuntu" {
+  count = var.ubuntu_image_file_id == "" ? 1 : 0
+
   content_type = "iso"
   datastore_id = var.image_datastore
   node_name    = var.proxmox_node
@@ -133,7 +142,7 @@ module "gitlab" {
   memory_mb         = local.gitlab_memory_mb
   disk_gb           = local.gitlab_disk_gb
   datastore_id      = var.vm_datastore
-  image_file_id     = proxmox_virtual_environment_download_file.ubuntu.id
+  image_file_id     = local.ubuntu_image_file_id
   bridge            = var.network_bridge
   vlan_id           = var.vlan_id
   ip_cidr           = var.gitlab_vm.ip
@@ -155,7 +164,7 @@ module "runner" {
   memory_mb         = var.runner_vm.memory_mb
   disk_gb           = var.runner_vm.disk_gb
   datastore_id      = var.vm_datastore
-  image_file_id     = proxmox_virtual_environment_download_file.ubuntu.id
+  image_file_id     = local.ubuntu_image_file_id
   bridge            = var.network_bridge
   vlan_id           = var.vlan_id
   ip_cidr           = var.runner_vm.ip
